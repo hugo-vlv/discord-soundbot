@@ -1,4 +1,4 @@
-import { Client, Guild, Message, TextChannel, VoiceState } from 'discord.js';
+import { Client, Guild, Message, TextChannel, VoiceChannel, VoiceState } from 'discord.js';
 
 import Config from '~/config/Config';
 import QueueItem from '~/queue/QueueItem';
@@ -17,6 +17,7 @@ export default class SoundBot extends Client {
   private readonly commands: CommandCollection;
   private readonly messageHandler: MessageHandler;
   private readonly queue: SoundQueue;
+  private currentChannel: VoiceChannel | null;
 
   constructor(
     config: Config,
@@ -30,6 +31,9 @@ export default class SoundBot extends Client {
     this.commands = commands;
     this.messageHandler = messageHandler;
     this.queue = queue;
+    // TODO: Must be an array, as the bot can connect to multiple sources
+    // TODO: Handle addition and deletions of channels in event handlers
+    this.currentChannel = null;
 
     this.addEventListeners();
   }
@@ -40,6 +44,29 @@ export default class SoundBot extends Client {
 
   public registerAdditionalCommands(commands: Command[]) {
     this.commands.registerCommands(commands);
+  }
+
+  public fetchSounds() {
+    return getSounds();
+  }
+
+  public playFromWeb(sound: string, /* guildId: string */): string {
+    // TODO: change the condition to check in the array of currentChannels
+    if (this.currentChannel !== null) {
+      if (!getSounds().includes(sound)) return "sound_not_found";
+      console.info('about to play');
+
+      this.queue.add(new QueueItem(sound, this.currentChannel));
+    }
+    else {
+      // Make the bot join a specific channel ?
+      return "not_in_voice_channel";
+    }
+    return "success";
+  }
+
+  public getSoundsForWeb() {
+    return getSounds();
   }
 
   private addEventListeners() {
@@ -61,6 +88,10 @@ export default class SoundBot extends Client {
     const { channel: previousVoiceChannel } = oldState;
     const { channel: currentVoiceChannel, member } = newState;
 
+    if (this.config.clientId === member?.user.id) {
+      this.currentChannel = currentVoiceChannel;
+    }
+
     if (!member) return;
     if (!currentVoiceChannel || previousVoiceChannel === currentVoiceChannel) return;
     if (!entrances.exists(member.id)) return;
@@ -74,6 +105,10 @@ export default class SoundBot extends Client {
   private onUserLeavesVoiceChannel(oldState: VoiceState, newState: VoiceState) {
     const { channel: previousVoiceChannel } = oldState;
     const { channel: currentVoiceChannel, member } = newState;
+
+    if (this.config.clientId === member?.user.id) {
+      this.currentChannel = null;
+    }
 
     if (!member) return;
     if (!previousVoiceChannel || previousVoiceChannel === currentVoiceChannel) return;
